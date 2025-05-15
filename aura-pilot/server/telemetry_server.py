@@ -1,4 +1,5 @@
 import grpc
+import os
 import csv
 import time
 import datetime
@@ -8,16 +9,20 @@ import telemetry_pb2_grpc
 
 class TelemetryServicer(telemetry_pb2_grpc.TelemetryServiceServicer):
     def SubscribeTelemetry(self, request, context):
-        # Load the telemetry data from CSV
+        # Determine CSV path from environment variable
+        csv_path = os.environ.get('TELEMETRY_CSV_PATH')
         telemetry_data = []
-        with open('thermaltelemetry.csv', 'r') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                telemetry_data.append(row)
+        try:
+            with open(csv_path, 'r') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    telemetry_data.append(row)
+        except FileNotFoundError:
+            print(f"CSV file not found: {csv_path}")
+            return
         
         print(f"Client subscribed to switch telemetry for port: {request.port}")
         
-        # Keep entries 300-420 as intended
         filtered_data = telemetry_data[:]
         if request.port:
             filtered_data = [row for row in filtered_data if row['port'] == request.port]
