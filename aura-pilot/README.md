@@ -6,11 +6,28 @@ docker-compose build
 docker-compose up
 ```
 
-Once it has ran, click ```v``` to launch Docker. In Docker, click Run on the telemetry-client to put the data into QuestDB.
+Wait for a few seconds to allow for the client to insert the data into QuestDB.
 
 To open the QuestDB interface, open a browser and go to: http://localhost:9000/index.html
 
+When finished remove all containers and volumes by running:
+```
+docker-compose down -v
+```
+
+# Mock gRPC Telemetric Data
+
+To choose which mock data to use (healthy, thermal issues, mechanical issues), go into `docker-compose.yml` and change the `TELEMETRY_CSV_PATH` variable. To generate new mock data, go into the `mock` folder and run the files to generate new csv.
+
+# Testing
+
+There is a testing file attached to confirm the subscription works from the server to the client, the client is successfully enters the data in QuestDB, and the QuestDB query to list downtimes gives at least one. To test it run:
+```
+zsh test.sh
+```
+
 # SQL Queries
+
 Below are some queries that can be ran in the QuestDB interface to get data.
 
 ###  Query to get start and end times of all downtimes

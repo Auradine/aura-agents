@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  questdb:
+    image: questdb/questdb:latest
+    container_name: questdb
+    ports:
+      - "8812:8812"
+      - "9000:9000"
+      - "9009:9009"
+    volumes:
+      - questdb-data:/root/.questdb/db
+    networks:
+      - telemetry-network
+    # healthcheck:
+    #   test: ["CMD", "nc", "-z", "localhost", "8812"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+    #   start_period: 15s
+
+  telemetry-server:
+    build:
+      context: ./server
+    container_name: telemetry-server
+    ports:
+      - "50051:50051"
+    environment:
+      - TELEMETRY_CSV_PATH=/app/mock/mechanicaltelemetry.csv #change the csv file here
+    volumes:
+      - ./mock:/app/mock
+    networks:
+      - telemetry-network
+    depends_on:
+      - questdb
+    restart: on-failure
+
+  telemetry-client:
+    build:
+      context: ./client
+    container_name: telemetry-client
+    depends_on:
+      - questdb
+      - telemetry-server
+    networks:
+      - telemetry-network
+    restart: on-failure
+
+networks:
+  telemetry-network:
+    driver: bridge
+
+volumes:
+  questdb-data:
