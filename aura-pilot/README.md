@@ -1,28 +1,12 @@
 # Getting Started
-To get started, open three terminal windows: one for the server, one for the client, and one for QuestDB. Then in client and server terminals, create and activate a virtual environment:
+
+To get started, open a terminal window. Make sure Docker is installed, and then run the following:
 ```
-python3 -m venv venv
-source venv/bin/activate
+docker-compose build
+docker-compose up
 ```
-Then in these two terminals, install the required packages in the virtual environment
-```
-pip install grpcio grpcio-tools
-pip install questdb psycopg2-binary
-```
-Then, we have to start everything. In the QuestDB terminal, run the following (make sure Docker is installed first):
-```
-docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 questdb/questdb
-```
-In the server terminal run:
-```
-cd server
-python telemetry_server.py
-```
-In the client terminal run:
-```
-cd client
-python telemetry_client.py
-```
+
+Once it has ran, click ```v``` to launch Docker. In Docker, click Run on the telemetry-client to put the data into QuestDB.
 
 To open the QuestDB interface, open a browser and go to: http://localhost:9000/index.html
 
