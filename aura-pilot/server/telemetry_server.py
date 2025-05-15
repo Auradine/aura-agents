@@ -10,13 +10,14 @@ class TelemetryServicer(telemetry_pb2_grpc.TelemetryServiceServicer):
     def SubscribeTelemetry(self, request, context):
         # Load the telemetry data from CSV
         telemetry_data = []
-        with open('thermaltelemetry.csv', 'r') as csvfile: #change csv here
+        with open('thermaltelemetry.csv', 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 telemetry_data.append(row)
         
         print(f"Client subscribed to switch telemetry for port: {request.port}")
         
+        # Keep entries 300-420 as intended
         filtered_data = telemetry_data[:]
         if request.port:
             filtered_data = [row for row in filtered_data if row['port'] == request.port]
@@ -56,7 +57,7 @@ class TelemetryServicer(telemetry_pb2_grpc.TelemetryServiceServicer):
                 continue
                 
             # Wait 1 second before sending the next entry
-            # time.sleep(1)
+            #time.sleep(1)
         
         print("Finished streaming telemetry data")
 
@@ -64,7 +65,7 @@ class TelemetryServicer(telemetry_pb2_grpc.TelemetryServiceServicer):
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     telemetry_pb2_grpc.add_TelemetryServiceServicer_to_server(TelemetryServicer(), server)
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port('0.0.0.0:50051')  # Change from [::]:50051 to 0.0.0.0:50051
     server.start()
     print("Telemetry Server started, listening on port 50051")
     try:

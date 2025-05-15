@@ -12,7 +12,7 @@ FAN_SPEED_MIN = 1000   # RPM
 def create_questdb_table():
     """Create the telemetry table in QuestDB if it doesn't exist."""
     conn = psycopg2.connect(
-        host="localhost",
+        host="questdb",
         port=8812,
         user="admin",
         password="quest",
@@ -21,35 +21,48 @@ def create_questdb_table():
     
     cursor = conn.cursor()
     
-    # Create table if it doesn't exist - using QuestDB specific syntax
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS switch_telemetry (
-        timestamp TIMESTAMP,
-        switch_id SYMBOL,
-        port SYMBOL,
-        linkState SYMBOL,
-        SNR DOUBLE,
-        FEC_Correctable DOUBLE,
-        FEC_Uncorrectable DOUBLE,
-        CRCErrorCount DOUBLE,
-        Temperature DOUBLE,
-        Voltage DOUBLE,
-        FanSpeed DOUBLE,
-        Humidity DOUBLE,
-        Airflow DOUBLE,
-        AmbientTemperature DOUBLE,
-        OpticalRxPower DOUBLE,
-        OpticalTxPower DOUBLE,
-        LinkLatency DOUBLE,
-        CableLengthEstimate DOUBLE,
-        ConnectorInsertionCount INT
-    ) timestamp(timestamp);
-    """)
+    # First drop the existing table if it exists
+    try:
+        cursor.execute("DROP TABLE IF EXISTS switch_telemetry;")
+        conn.commit()
+        print("Dropped existing table")
+    except Exception as e:
+        print(f"Error dropping table: {e}")
+        conn.rollback()
     
-    conn.commit()
+    # Create a new partitioned table with proper settings for time-series data
+    try:
+        cursor.execute("""
+        CREATE TABLE switch_telemetry (
+            timestamp TIMESTAMP,
+            switch_id SYMBOL,
+            port SYMBOL,
+            linkState SYMBOL,
+            SNR DOUBLE,
+            FEC_Correctable DOUBLE,
+            FEC_Uncorrectable DOUBLE,
+            CRCErrorCount DOUBLE,
+            Temperature DOUBLE,
+            Voltage DOUBLE,
+            FanSpeed DOUBLE,
+            Humidity DOUBLE,
+            Airflow DOUBLE,
+            AmbientTemperature DOUBLE,
+            OpticalRxPower DOUBLE,
+            OpticalTxPower DOUBLE,
+            LinkLatency DOUBLE,
+            CableLengthEstimate DOUBLE,
+            ConnectorInsertionCount INT
+        ) TIMESTAMP(timestamp) PARTITION BY DAY;
+        """)
+        conn.commit()
+        print("QuestDB table created successfully with partitioning")
+    except Exception as e:
+        print(f"Error creating table: {e}")
+        conn.rollback()
+    
     cursor.close()
     conn.close()
-    print("QuestDB table created successfully")
 
 def insert_telemetry(conn, telemetry, switch_id):
     """Insert telemetry data into QuestDB."""
@@ -78,19 +91,25 @@ def insert_telemetry(conn, telemetry, switch_id):
     );
     """
     
-    # Execute the SQL statement
-    cursor.execute(sql, (
-        timestamp_iso, switch_id, telemetry.port, telemetry.linkState,
-        telemetry.SNR, telemetry.FEC_Correctable, telemetry.FEC_Uncorrectable,
-        telemetry.CRCErrorCount, telemetry.Temperature, telemetry.Voltage,
-        telemetry.FanSpeed, telemetry.Humidity, telemetry.Airflow,
-        telemetry.AmbientTemperature, telemetry.OpticalRxPower, 
-        telemetry.OpticalTxPower, telemetry.LinkLatency,
-        telemetry.CableLengthEstimate, telemetry.ConnectorInsertionCount
-    ))
+    try:
+        # Execute the SQL statement
+        cursor.execute(sql, (
+            timestamp_iso, switch_id, telemetry.port, telemetry.linkState,
+            telemetry.SNR, telemetry.FEC_Correctable, telemetry.FEC_Uncorrectable,
+            telemetry.CRCErrorCount, telemetry.Temperature, telemetry.Voltage,
+            telemetry.FanSpeed, telemetry.Humidity, telemetry.Airflow,
+            telemetry.AmbientTemperature, telemetry.OpticalRxPower, 
+            telemetry.OpticalTxPower, telemetry.LinkLatency,
+            telemetry.CableLengthEstimate, telemetry.ConnectorInsertionCount
+        ))
+        conn.commit()
+        print(f"✅ Inserted data for port {telemetry.port} at {timestamp_iso}")
+    except Exception as e:
+        print(f"❌ Insert error: {e}")
+        conn.rollback()
     
-    conn.commit()
     cursor.close()
+
 
 def run():
     # Create QuestDB table if it doesn't exist
@@ -98,15 +117,19 @@ def run():
     
     # Connect to QuestDB for data insertion
     questdb_conn = psycopg2.connect(
-        host="localhost",
+        host="questdb",  # Change from localhost to questdb
         port=8812,
         user="admin",
         password="quest",
         database="qdb"
     )
+
+    # Add a delay to ensure the server is ready
+    print("Waiting for telemetry server to start...")
+    time.sleep(5)  # Give the server a moment to start
     
     # Connect to gRPC server
-    with grpc.insecure_channel('localhost:50051') as channel:
+    with grpc.insecure_channel('telemetry-server:50051') as channel:  # Change from localhost to telemetry-server
         stub = telemetry_pb2_grpc.TelemetryServiceStub(channel)
         
         # Subscribe to telemetry data
