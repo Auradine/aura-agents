@@ -74,7 +74,7 @@ ORDER BY f.port, f.flap_start_time;
 ```
   
 
-###  Query to get data from 10 seconds before every downtime
+###  Query to get data from 10 seconds before every downtime in the last minute
 ```
 WITH link_states AS (
 SELECT port, timestamp, switch_id, CASE WHEN linkState = 'up' THEN 1 ELSE 0 END AS is_up
