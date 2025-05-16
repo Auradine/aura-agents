@@ -140,11 +140,11 @@ def run():
         try:
             # Process streaming telemetry data
             for telemetry in stub.SubscribeTelemetry(request):
-                # Print the basic telemetry data
-                print(f"\nTimestamp: {telemetry.timestamp}")
-                print(f"Port: {telemetry.port} | Link: {telemetry.linkState}")
-                print(f"Temperature: {telemetry.Temperature:.1f}°C | Ambient: {telemetry.AmbientTemperature:.1f}°C")
-                print(f"Fan Speed: {telemetry.FanSpeed:.0f} RPM | Humidity: {telemetry.Humidity:.1f}%")
+                # Print the basic telemetry data (optional, can be commented out)
+                # print(f"\nTimestamp: {telemetry.timestamp}")
+                # print(f"Port: {telemetry.port} | Link: {telemetry.linkState}")
+                # print(f"Temperature: {telemetry.Temperature:.1f}°C | Ambient: {telemetry.AmbientTemperature:.1f}°C")
+                # print(f"Fan Speed: {telemetry.FanSpeed:.0f} RPM | Humidity: {telemetry.Humidity:.1f}%")
                 
                 # Check for critical conditions
                 alerts = []
@@ -159,12 +159,51 @@ def run():
                 for alert in alerts:
                     print(alert)
                 
-                # Insert the telemetry data into QuestDB
+                # Insert each telemetry row into QuestDB as it arrives
                 try:
-                    insert_telemetry(questdb_conn, telemetry, switch_id)
-                    print(f"✅ Data inserted into QuestDB")
-                except Exception as db_error:
-                    print(f"❌ Database error: {db_error}")
+                    conn = psycopg2.connect(
+                        host="questdb",
+                        port=8812,
+                        user="admin",
+                        password="quest",
+                        database="qdb"
+                    )
+                    cur = conn.cursor()
+                    insert_query = """
+                        INSERT INTO switch_telemetry (
+                            timestamp, port, linkState, SNR, FEC_Correctable, FEC_Uncorrectable, CRCErrorCount,
+                            Temperature, Voltage, FanSpeed, Humidity, Airflow, AmbientTemperature,
+                            OpticalRxPower, OpticalTxPower, LinkLatency, CableLengthEstimate, ConnectorInsertionCount
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                    """
+                    cur.execute(insert_query, (
+                        telemetry.timestamp,
+                        telemetry.port,
+                        telemetry.linkState,
+                        telemetry.SNR,
+                        telemetry.FEC_Correctable,
+                        telemetry.FEC_Uncorrectable,
+                        telemetry.CRCErrorCount,
+                        telemetry.Temperature,
+                        telemetry.Voltage,
+                        telemetry.FanSpeed,
+                        telemetry.Humidity,
+                        telemetry.Airflow,
+                        telemetry.AmbientTemperature,
+                        telemetry.OpticalRxPower,
+                        telemetry.OpticalTxPower,
+                        telemetry.LinkLatency,
+                        telemetry.CableLengthEstimate,
+                        telemetry.ConnectorInsertionCount
+                    ))
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                except Exception as e:
+                    print(f"Error inserting telemetry into QuestDB: {e}")
+                    continue
                     
         except KeyboardInterrupt:
             print("Subscription canceled by user")

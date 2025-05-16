@@ -1,70 +1,59 @@
 import grpc
 import os
-import csv
 import time
 import datetime
 from concurrent import futures
 import telemetry_pb2
 import telemetry_pb2_grpc
+import threading
+import random
+import pandas as pd
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from mock_telemetry_generator import thermal_telemetry_generator
+from mock_telemetry_generator import mechanical_telemetry_generator
+from mock_telemetry_generator import healthy_telemetry_generator
+
 
 class TelemetryServicer(telemetry_pb2_grpc.TelemetryServiceServicer):
     def SubscribeTelemetry(self, request, context):
-        # Determine CSV path from environment variable
-        csv_path = os.environ.get('TELEMETRY_CSV_PATH')
-        telemetry_data = []
-        try:
-            with open(csv_path, 'r') as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    telemetry_data.append(row)
-        except FileNotFoundError:
-            print(f"CSV file not found: {csv_path}")
-            return
-        
-        print(f"Client subscribed to switch telemetry for port: {request.port}")
-        
-        filtered_data = telemetry_data[:]
-        if request.port:
-            filtered_data = [row for row in filtered_data if row['port'] == request.port]
-        
-        # Stream the data
-        for row in filtered_data:
-            try:
-                # Safely convert values with proper handling for empty strings
+        # Generate a 10-minute window of data, then loop
+        interval_seconds = 1
+        minutes = 2
+        while True:
+            # choose one of the following, and comment out the others:
+            df = thermal_telemetry_generator(minutes=minutes, interval_seconds=interval_seconds)
+            # df = mechanical_telemetry_generator(minutes=minutes, interval_seconds=interval_seconds)
+            # df = healthy_telemetry_generator(minutes=minutes, interval_seconds=interval_seconds)
+            
+            filtered_data = df
+            if request.port:
+                filtered_data = df[df['port'] == request.port]
+            for _, row in filtered_data.iterrows():
                 telemetry_entry = telemetry_pb2.TelemetryData(
-                    timestamp=row['timestamp'],
+                    timestamp=str(row['timestamp']),
                     port=row['port'],
                     linkState=row['linkState'],
-                    SNR=float(row['SNR']) if row['SNR'] else 0.0,
-                    FEC_Correctable=float(row['FEC_Correctable']) if row['FEC_Correctable'] else 0.0,
-                    FEC_Uncorrectable=float(row['FEC_Uncorrectable']) if row['FEC_Uncorrectable'] else 0.0,
-                    CRCErrorCount=float(row['CRCErrorCount']) if row['CRCErrorCount'] else 0.0,
-                    Temperature=float(row['Temperature']) if row['Temperature'] else 0.0,
-                    Voltage=float(row['Voltage']) if row['Voltage'] else 0.0,
-                    FanSpeed=float(row['FanSpeed']) if row['FanSpeed'] else 0.0,
-                    Humidity=float(row['Humidity']) if row['Humidity'] else 0.0,
-                    Airflow=float(row['Airflow']) if row['Airflow'] else 0.0,
-                    AmbientTemperature=float(row['AmbientTemperature']) if row['AmbientTemperature'] else 0.0,
-                    OpticalRxPower=float(row['OpticalRxPower']) if row['OpticalRxPower'] else 0.0,
-                    OpticalTxPower=float(row['OpticalTxPower']) if row['OpticalTxPower'] else 0.0,
-                    LinkLatency=float(row['LinkLatency']) if row['LinkLatency'] else 0.0,
-                    CableLengthEstimate=float(row['CableLengthEstimate']) if row['CableLengthEstimate'] else 0.0,
-                    ConnectorInsertionCount=int(row['ConnectorInsertionCount']) if row['ConnectorInsertionCount'] else 0
+                    SNR=float(row['SNR']) if not pd.isnull(row['SNR']) else 0.0,
+                    FEC_Correctable=float(row['FEC_Correctable']) if not pd.isnull(row['FEC_Correctable']) else 0.0,
+                    FEC_Uncorrectable=float(row['FEC_Uncorrectable']) if not pd.isnull(row['FEC_Uncorrectable']) else 0.0,
+                    CRCErrorCount=float(row['CRCErrorCount']) if not pd.isnull(row['CRCErrorCount']) else 0.0,
+                    Temperature=float(row['Temperature']) if not pd.isnull(row['Temperature']) else 0.0,
+                    Voltage=float(row['Voltage']) if not pd.isnull(row['Voltage']) else 0.0,
+                    FanSpeed=float(row['FanSpeed']) if not pd.isnull(row['FanSpeed']) else 0.0,
+                    Humidity=float(row['Humidity']) if not pd.isnull(row['Humidity']) else 0.0,
+                    Airflow=float(row['Airflow']) if not pd.isnull(row['Airflow']) else 0.0,
+                    AmbientTemperature=float(row['AmbientTemperature']) if not pd.isnull(row['AmbientTemperature']) else 0.0,
+                    OpticalRxPower=float(row['OpticalRxPower']) if not pd.isnull(row['OpticalRxPower']) else 0.0,
+                    OpticalTxPower=float(row['OpticalTxPower']) if not pd.isnull(row['OpticalTxPower']) else 0.0,
+                    LinkLatency=float(row['LinkLatency']) if not pd.isnull(row['LinkLatency']) else 0.0,
+                    CableLengthEstimate=float(row['CableLengthEstimate']) if not pd.isnull(row['CableLengthEstimate']) else 0.0,
+                    ConnectorInsertionCount=int(row['ConnectorInsertionCount']) if not pd.isnull(row['ConnectorInsertionCount']) else 0
                 )
-                
-                # Yield the data to the client
                 yield telemetry_entry
-                
-            except Exception as e:
-                print(f"Error processing row: {e}")
-                print(f"Problematic row data: {row}")
-                # Continue with next row instead of crashing
-                continue
-                
-            # Wait 1 second before sending the next entry
-            #time.sleep(1)
-        
-        print("Finished streaming telemetry data")
+                time.sleep(interval_seconds)
+            # After 10 minutes, loop again
 
 
 def serve():
